@@ -143,7 +143,7 @@ def get_next_ad(fake_ads):
     already_played_ads.append(index)
     return index
 
-if __name__ == '__mains__':
+if __name__ == '__main__':
 
     MAX_PLAY_TIME = 120 # 120 seconds -> 2 mins
     MAX_PLAY_TIME_PERC = 0.60 # 60% of the song
@@ -216,6 +216,3 @@ if __name__ == '__mains__':
             print(f"[+] {SONGS_PER_AD - song_counter - 1} songs left to ad ({song_counter+1}/{SONGS_PER_AD})")
             song_counter +=1
             crossfadeOut(6, MIN_VOL, 0.5)
-
-if __name__ == '__main__':
-    print(sp.devices())
