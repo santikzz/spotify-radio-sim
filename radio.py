@@ -7,7 +7,7 @@ import threading
 import termux
 
 scopes = "user-read-playback-state, user-modify-playback-state, user-read-currently-playing, playlist-read-private, playlist-read-collaborative, user-read-playback-position, user-top-read, user-read-recently-played, user-library-read"
-sp = spotipy.Spotify(auth_manager=SpotifyOAuth(client_id="19ba756cd5e9417b852cad85658ddd67", client_secret="846aa3d6ecc64085bfbd59ea52f109a0", redirect_uri="http://localhost:8080", scope = scopes))
+sp = spotipy.Spotify(auth_manager=SpotifyOAuth(client_id="", client_secret="", redirect_uri="http://localhost:8080", scope = scopes))
 
 global already_played_ads, volume_support, device_type
 already_played_ads = []
