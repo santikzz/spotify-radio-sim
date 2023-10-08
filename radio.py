@@ -1,218 +1,149 @@
 import spotipy
-from spotipy.oauth2 import SpotifyClientCredentials, SpotifyOAuth
-import json
-import time
-import random
+from spotipy.oauth2 import SpotifyOAuth
 import threading
-import termux
+import os
+import random
+import time
 
-scopes = "user-read-playback-state, user-modify-playback-state, user-read-currently-playing, playlist-read-private, playlist-read-collaborative, user-read-playback-position, user-top-read, user-read-recently-played, user-library-read"
-sp = spotipy.Spotify(auth_manager=SpotifyOAuth(client_id="", client_secret="", redirect_uri="http://localhost:8080", scope = scopes))
+class Radio:
 
-global already_played_ads, volume_support, device_type
-already_played_ads = []
+    MAX_PLAYTIME = 60 # seconds
+    ADS_PLAYLIST = "spotify:playlist:45XIyADnYlW5xnB5s1NzZw" # local files ads playlist
 
-def thCrossfadeOut(steps=5, min_vol=33, interval=1):
-    threading.Thread(target=crossfadeOut, args=[steps, min_vol, interval]).start()
+    def __init__(self) -> None:
+          
+        scopes = "user-read-playback-state, user-modify-playback-state, user-read-currently-playing, playlist-read-private, playlist-read-collaborative, user-read-playback-position, user-top-read, user-read-recently-played, user-library-read"
+        self.sp = spotipy.Spotify(auth_manager=SpotifyOAuth(client_id="19ba756cd5e9417b852cad85658ddd67", client_secret="846aa3d6ecc64085bfbd59ea52f109a0", redirect_uri="http://localhost:8080", scope = scopes))
 
-def crossfadeOut(steps, min_vol, interval):
-    global volume_support
-    global device_type
-    
-    if device_type == "Smartphone":  
-        step = (100 - 33) / 10
-        for i in range(1, steps+1):
-            vol = int(33 - step*i)
-            vol = min(vol, 100)
-            termux.volume("music", vol)
-            time.sleep(0.25)
-        return
+        self.already_played_ads = []
+        self.song_counter = 0
+        self.songs_per_ad = 1#random.randint(2,3)
+        self.device = self.select_device()
+        self.songs = self.load_songs()
+        self.ads = self.load_ads(self.ADS_PLAYLIST)
 
-    if not volume_support:
-        return
-    
-    step = (100 - min_vol) / steps
-    for i in range(1, steps+1):
-        vol = int(100 - step*i)
-        sp.volume(vol)
-        time.sleep(interval)
-
-def thCrossfadeIn(steps=5, min_vol=33, interval=1):
-    threading.Thread(target=crossfadeIn, args=[steps, min_vol, interval]).start()
-
-def crossfadeIn(steps, min_vol, interval):
-    global volume_support
-    global device_type
-    
-    if device_type == "Smartphone":  
-        step = (100 - 33) / 10
-        for i in range(1, steps+1):
-            vol = int(33 + step*i)
-            vol = min(vol, 100)
-            termux.volume("music", vol)
-            time.sleep(0.25)
-        return
-    
-    if not volume_support:
-        return
-    
-    step = (100 - min_vol) / steps
-    for i in range(1, steps+1):
-        vol = int(min_vol + step*i)
-        vol = min(vol, 100)
-        sp.volume(vol)
-        time.sleep(interval)
-
-def set_volume(volume):
-    global volume_support
-    if not volume_support:
-        return
-    sp.volume(volume)
-
-def select_device():
-    global volume_support
-    global device_type
-    devices = sp.devices()
-    if len(devices) == 0:
-        print("[-] No devices found")
-        return
-    d_id = 0
-    for device in devices["devices"]:
-        print(f"[{d_id}]: {device['name']} ({device['type']})")
-        d_id += 1
-    d_index = int(input("\n> Select device: "))
-    volume_support = devices["devices"][d_index]["supports_volume"]
-    device_type = devices["devices"][d_index]["type"]
-    device = devices["devices"][d_index]["id"]
-    return device
-
-def select_playlist():
-    playlists = sp.current_user_playlists()
-    p_id = 0
-    for playlist in playlists["items"]:
-        print(f"[{p_id}]: {playlist['name']}")
-        p_id += 1
-    p = int(input("\n> Select playlist: "))
-    return playlists["items"][p]["id"]
-
-def get_recent_played_songs():
-    recent = []
-    songs = sp.current_user_recently_played(limit=15)
-    for song in songs["items"]:
-        recent.append(song["id"])
-    return recent
-
-def load_songs():
-    pl_selected = select_playlist()                             # SELECT PLAYLIST
-    songs = get_playlist_random_songs(pl_selected, 15)          # GET SONGS FROM PLAYLIST
-    choice = input("\n> Load recently played songs? (y/n): ")
-    if choice.lower == "y":
-        recent = get_recent_played_songs()
-        songs.append(recent)
-        random.shuffle(songs)
-    return songs
-
-def get_playlist_random_songs(playlist_id, limit = None):
-    songs_id = []
-    pl_data = sp.playlist(playlist_id=playlist_id, fields="name, id, tracks(total), tracks(items(track(id, name, duration_ms)))")
-    for song in pl_data["tracks"]["items"]:
-        songs_id.append(song["track"])   
-    random.shuffle(songs_id)
-    if ( (limit >= len(songs_id)) or (limit == None) ):
-        return songs_id
-    else:
-        return songs_id[:limit]
-
-def load_ads(playlist_id):
-    ads = []
-    songs = sp.playlist(playlist_id=playlist_id, fields="tracks(total), tracks(items(track(id, name, duration_ms)))")
-    _id = 0
-    for song in songs["tracks"]["items"]:
-        ads.append({"id":_id, "duration_ms": song["track"]["duration_ms"], "name": song["track"]["name"]})
-        _id += 1
-    return ads
-
-def get_next_ad(fake_ads):
-    global already_played_ads
-    total = len(fake_ads)
-    if len(already_played_ads) >= total:
-        already_played_ads.clear()
-    index = random.randint(0, total-1)
-    while index in already_played_ads:
-        index = random.randint(0, total-1)
-    already_played_ads.append(index)
-    return index
-
-if __name__ == '__main__':
-
-    MAX_PLAY_TIME = 120 # 120 seconds -> 2 mins
-    MAX_PLAY_TIME_PERC = 0.60 # 60% of the song
-    SONGS_PER_AD = 2
-    MIN_VOL = 33
-
-    pl_fake_ads = "spotify:playlist:45XIyADnYlW5xnB5s1NzZw"
-    # pl_selected = "spotify:playlist:37i9dQZF1DX0URqd6gYywe"
-    # pl_selected = "spotify:playlist:4o6kCaGYmQkPK7bXDlzY3u"
-
-    # DEVICE SELECTION
-    device = select_device()
-    
-
-    # INSTANCE VARIABLES
-    song_counter = 0
-    fake_ads = load_ads(pl_fake_ads)  # LOAD FAKE ADS
-    songs = load_songs()
-
-    print("\n#################################################")
-    print("#                                               #")
-    print("#   Spotify radio simulator v1.0 - by santikz   #")
-    print("#                                               #")
-    print("#################################################\n")
-    print(f"[+] {len(fake_ads)} ads loded")
-    print(f"[+] {len(songs)} songs loaded\n")
-
-    set_volume(MIN_VOL)
-    for song in songs:
-
-        if song_counter >= SONGS_PER_AD:
-            
-            # Play ad & reset counter
-            _ad_index = get_next_ad(fake_ads)
-
-            print(f"[+] Playing ad \"{fake_ads[_ad_index]['name']}\" ({round(fake_ads[_ad_index]['duration_ms']/1000,2)} s) - [{len(already_played_ads)} of {len(fake_ads)} ads played]")
-            sp.start_playback(device_id=device, context_uri=pl_fake_ads, offset={"position": _ad_index })
-            thCrossfadeIn(3, MIN_VOL, 0.5)
-            
-            song_counter = 0
-            time.sleep(fake_ads[_ad_index]['duration_ms']/1000 - 6)
-            crossfadeOut(3, MIN_VOL, 0.5)
-
-        else:
-            
-            # Play song/skip to next
-            thCrossfadeIn(5, MIN_VOL, 0.5)
-            sp.start_playback(device_id=device, uris=[f"spotify:track:{song['id']}"] )
-            
-            duration = song["duration_ms"] / 1000
-            # if the song duration exceeds the minium duration
-            if duration > MAX_PLAY_TIME:
-                
-                # if the % duration of the song is less than the minium duration, wait the minium
-                if duration*MAX_PLAY_TIME_PERC < MAX_PLAY_TIME:
-                    sleep_time = MAX_PLAY_TIME
-                else:
-                    sleep_time = duration*MAX_PLAY_TIME_PERC
-
-                # sleep_time = MAX_PLAY_TIME
-
-                print(f"[+] Playing \"{song['name']}\" - (>{round(duration/60,2)} min) skiping on {round(sleep_time,2)}s ...")
-                time.sleep(sleep_time - 1)
-
-            # play the whole song
+    def crossfade(self, steps, interval, start, end):
+        step_diff = (end - start) / steps
+        volume = start
+        for _ in range(1, steps+1):
+            volume += step_diff
+            if self.device["type"] == "Smartphone":  
+                os.system(f"termux-volume music {int(volume)}") 
+            elif self.device["type"] == "Computer" and self.device["supports_volume"]:
+                self.sp.volume(int(volume), self.device["id"])
             else:
-                print(f"[+] Playing \"{song['name']}\" - ({round(duration/60,2)} min)")
-                time.sleep(duration - 1)
-            
-            print(f"[+] {SONGS_PER_AD - song_counter - 1} songs left to ad ({song_counter+1}/{SONGS_PER_AD})")
-            song_counter +=1
-            crossfadeOut(6, MIN_VOL, 0.5)
+                return
+            time.sleep(interval)
+        
+    def async_crossfade(self, steps, interval, start, end):
+        threading.Thread(target=self.crossfade, args=[steps, interval, start, end]).start()
+
+    def set_volume(self, volume):
+        if self.device["type"] == "Smartphone":  
+            os.system(f"termux-volume music {int(volume)}") 
+        elif self.device["type"] == "Computer" and self.device["supports_volume"]:
+            self.sp.volume(int(volume), self.device["id"])
+        else:
+            return
+
+    def select_device(self):
+        devices = self.sp.devices()
+        if len(devices) == 0:
+            print("\n[-] No devices found")
+            return None
+        idx = 1
+        for device in devices["devices"]:
+            print(f"[{idx}]: {device['name']} ({device['type']})")
+            idx += 1
+        opt = int(input("\n> Select device: "))-1
+        return devices["devices"][opt]
+
+    def select_playlist(self):
+        playlists = self.sp.current_user_playlists()
+        idx = 1
+        print("### Select a playlist ###")
+        for playlist in playlists["items"]:
+            print(f"[{idx}]: {playlist['name']}")
+            idx += 1
+        opt = int(input("\n> Select playlist: "))-1
+        return playlists["items"][opt]["id"]
+
+    def get_playlist_random_songs(self, playlist_id, limit = None):
+        result = []
+        songs = self.sp.playlist(playlist_id=playlist_id, fields="name, id, tracks(total), tracks(items(track(id, name, duration_ms)))")
+        for song in songs["tracks"]["items"]:
+            result.append(song["track"])   
+        random.shuffle(result)
+        if ((limit >= len(result)) or (limit == None)):
+            return result
+        else:
+            return result[:limit]
+
+    def get_recent_played_songs(self):
+        recent = []
+        songs = self.sp.current_user_recently_played(limit=20)
+        for song in songs["items"]:
+            recent.append(song["id"])
+        return recent
+    
+    def load_songs(self):
+        playlist = self.select_playlist()
+        songs = self.get_playlist_random_songs(playlist, 20)
+        choice = input("> Load recently played songs? (y/n): ")
+        if choice.lower == "y":
+            recent = self.get_recent_played_songs()
+            songs = songs + recent
+            random.shuffle(songs)
+        return songs
+
+    def load_ads(self, playlist_id):
+        ads = []
+        songs = self.sp.playlist(playlist_id=playlist_id, fields="tracks(total), tracks(items(track(id, name, duration_ms)))")
+        idx = 0
+        for song in songs["tracks"]["items"]:
+            ads.append({"id":idx, "duration_ms": song["track"]["duration_ms"], "name": song["track"]["name"]})
+            idx += 1
+        return ads
+
+    def get_next_ad_index(self):
+        total = len(self.ads)
+        if len(self.already_played_ads) >= total:
+            self.already_played_ads.clear()
+        index = random.randint(0, total-1)
+        while index in self.already_played_ads:
+            index = random.randint(0, total-1)
+        self.already_played_ads.append(index)
+        return index
+    
+    def play_ad(self):
+        index = self.get_next_ad_index()
+        self.set_volume(33)
+        self.async_crossfade(5, 0.5, 33, 100)
+        print(f"[+] Playing ad \"{self.ads[index]['name']}\"")
+        self.sp.start_playback(device_id=self.device["id"], context_uri=self.ADS_PLAYLIST, offset={"position": index })
+        self.song_counter = 0
+        self.songs_per_ad = random.randint(2, 3)
+        time.sleep( (self.ads[index]["duration_ms"]/1000) - 4)
+
+    def play_song(self, song):
+
+        self.set_volume(33)
+        self.async_crossfade(5, 0.5, 33, 100)
+        self.sp.start_playback(device_id=self.device["id"], uris=[f"spotify:track:{song['id']}"] )
+        
+        duration = song["duration_ms"] / 1000
+
+        if duration > self.MAX_PLAYTIME:
+            print(f"[+] Playing \"{song['name']}\" - ({round(duration/60,2)} min) skiping on {self.MAX_PLAYTIME}s ...")
+            time.sleep(self.MAX_PLAYTIME)
+        
+        else:
+
+            print(f"[+] Playing \"{song['name']}\" - ({round(duration/60,2)} min)")
+            time.sleep(duration - 7)
+
+        self.song_counter += 1
+        self.crossfade(12, 0.5, 100, 33)
+
+    def display_info(self):
+        print(f"\n[+] Songs loaded: ({len(self.songs)}) / Ads loaded: ({len(self.ads)}) ")
