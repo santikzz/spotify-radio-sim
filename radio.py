@@ -1,4 +1,4 @@
-seimport spotipy
+import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 import threading
 import os
@@ -14,7 +14,7 @@ class Radio:
     def __init__(self) -> None:
           
         scopes = "user-read-playback-state, user-modify-playback-state, user-read-currently-playing, playlist-read-private, playlist-read-collaborative, user-read-playback-position, user-top-read, user-read-recently-played, user-library-read"
-        self.sp = spotipy.Spotify(auth_manager=SpotifyOAuth(client_id="", client_secret="", redirect_uri="http://localhost:8080", scope = scopes))
+        self.sp = spotipy.Spotify(auth_manager=SpotifyOAuth(client_id="19ba756cd5e9417b852cad85658ddd67", client_secret="846aa3d6ecc64085bfbd59ea52f109a0", redirect_uri="http://localhost:8080", scope = scopes))
 
         self.already_played_ads = []
         self.song_counter = 0
