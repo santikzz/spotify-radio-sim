@@ -1,23 +1,24 @@
-import spotipy
+seimport spotipy
 from spotipy.oauth2 import SpotifyOAuth
 import threading
 import os
 import random
 import time
+import termux
 
 class Radio:
 
-    MAX_PLAYTIME = 60 # seconds
+    MAX_PLAYTIME = 130 # seconds
     ADS_PLAYLIST = "spotify:playlist:45XIyADnYlW5xnB5s1NzZw" # local files ads playlist
 
     def __init__(self) -> None:
           
         scopes = "user-read-playback-state, user-modify-playback-state, user-read-currently-playing, playlist-read-private, playlist-read-collaborative, user-read-playback-position, user-top-read, user-read-recently-played, user-library-read"
-        self.sp = spotipy.Spotify(auth_manager=SpotifyOAuth(client_id="", client_secret="", redirect_uri="http://localhost:8080", scope = scopes))
+        self.sp = spotipy.Spotify(auth_manager=SpotifyOAuth(client_id="19ba756cd5e9417b852cad85658ddd67", client_secret="846aa3d6ecc64085bfbd59ea52f109a0", redirect_uri="http://localhost:8080", scope = scopes))
 
         self.already_played_ads = []
         self.song_counter = 0
-        self.songs_per_ad = 1#random.randint(2,3)
+        self.songs_per_ad = 1 #random.randint(2,3)
         self.device = self.select_device()
         self.songs = self.load_songs()
         self.ads = self.load_ads(self.ADS_PLAYLIST)
@@ -27,12 +28,7 @@ class Radio:
         volume = start
         for _ in range(1, steps+1):
             volume += step_diff
-            if self.device["type"] == "Smartphone":  
-                os.system(f"termux-volume music {int(volume)}") 
-            elif self.device["type"] == "Computer" and self.device["supports_volume"]:
-                self.sp.volume(int(volume), self.device["id"])
-            else:
-                return
+            self.set_volume(volume)
             time.sleep(interval)
         
     def async_crossfade(self, steps, interval, start, end):
@@ -40,8 +36,9 @@ class Radio:
 
     def set_volume(self, volume):
         if self.device["type"] == "Smartphone":  
-            os.system(f"termux-volume music {int(volume)}") 
-        elif self.device["type"] == "Computer" and self.device["supports_volume"]:
+            #os.system(f"termux-volume music {int(volume)}") 
+            termux.volume("music", int(volume))
+        elif self.device["type"] == "Computer" or self.device["supports_volume"]:
             self.sp.volume(int(volume), self.device["id"])
         else:
             return
